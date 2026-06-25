@@ -167,9 +167,117 @@ class DataQualityAnalyzer:
         report.to_csv(self.output_path, index=False, encoding="utf-8-sig")
         print(f"报告已保存至: {self.output_path}")
 
+    def clean_data(self) -> pd.DataFrame:
+        """
+        数据清洗主流程
+
+        按顺序执行以下步骤，每步输出清洗统计信息：
+
+        过滤步骤（删除行）：
+            1. 去重 —— 删除完全重复的行，避免虚增样本量
+            2. 时间异常 —— 下车时间 ≤ 上车时间不可能发生，属录入错误
+            3. 乘客数异常 —— 0人或超过5人不合法
+               (NYC TLC规定：4乘客出租车最多4人，5乘客出租车最多5人)
+            4. 距离异常 —— ≤0未行驶，>200英里远超合理范围
+            5. 费用异常 —— fare_amount ≤ 0 属退款/调整记录
+            6. 费率码异常 —— RatecodeID=99 官方定义为 Null/unknown
+            7. 供应商异常 —— VendorID 不在 {1,2,6,7}
+               (官方字典仅1=Creative, 2=Curb, 6=Myle, 7=Helix)
+
+        填充步骤（修改值）：
+            8. store_and_fwd_flag 缺失 → 填充"N"
+               (缺失通常意味"否"而非未知)
+            9. congestion_surcharge/Airport_fee 缺失 → 填充0
+               (属旧版本数据未包含字段，0最安全)
+            10. 负值附加费裁剪 → 裁剪为0
+                (附加费/税费/小费不应为负，小额负值属舍入误差)
+
+        重算步骤：
+            11. 重算 total_amount = 所有费用字段求和
+                (清洗后各字段值可能变动，保证一致性)
+
+        Returns
+        -------
+        pd.DataFrame
+            清洗后的 DataFrame
+        """
+        print(f"\n开始数据清洗，当前数据量: {len(self.df)} 行")
+
+        before = len(self.df)
+        self.df = self.df.drop_duplicates()
+        after = len(self.df)
+        print(f"  步骤1 去重: 删除 {before - after} 行 ({((before - after) / before * 100):.2f}%)，剩余 {after} 行")
+
+        before = len(self.df)
+        time_invalid = self.df["tpep_dropoff_datetime"] <= self.df["tpep_pickup_datetime"]
+        self.df = self.df[~time_invalid]
+        after = len(self.df)
+        print(f"  步骤2 时间异常: 删除 {before - after} 行 ({((before - after) / before * 100):.2f}%)，剩余 {after} 行")
+
+        before = len(self.df)
+        passenger_invalid = (self.df["passenger_count"] == 0) | (self.df["passenger_count"] > 5)
+        self.df = self.df[~passenger_invalid]
+        after = len(self.df)
+        print(f"  步骤3 乘客数异常: 删除 {before - after} 行 ({((before - after) / before * 100):.2f}%)，剩余 {after} 行")
+
+        before = len(self.df)
+        distance_invalid = (self.df["trip_distance"] <= 0) | (self.df["trip_distance"] > 200)
+        self.df = self.df[~distance_invalid]
+        after = len(self.df)
+        print(f"  步骤4 距离异常: 删除 {before - after} 行 ({((before - after) / before * 100):.2f}%)，剩余 {after} 行")
+
+        before = len(self.df)
+        fare_invalid = self.df["fare_amount"] <= 0
+        self.df = self.df[~fare_invalid]
+        after = len(self.df)
+        print(f"  步骤5 费用异常: 删除 {before - after} 行 ({((before - after) / before * 100):.2f}%)，剩余 {after} 行")
+
+        before = len(self.df)
+        self.df = self.df[self.df["RatecodeID"] != 99]
+        after = len(self.df)
+        print(f"  步骤6 费率码异常: 删除 {before - after} 行 ({((before - after) / before * 100):.2f}%)，剩余 {after} 行")
+
+        before = len(self.df)
+        valid_vendors = {1, 2, 6, 7}
+        self.df = self.df[self.df["VendorID"].isin(valid_vendors)]
+        after = len(self.df)
+        print(f"  步骤7 供应商异常: 删除 {before - after} 行 ({((before - after) / before * 100):.2f}%)，剩余 {after} 行")
+
+        before = self.df["store_and_fwd_flag"].isnull().sum()
+        self.df["store_and_fwd_flag"] = self.df["store_and_fwd_flag"].fillna("N")
+        print(f"  步骤8 store_and_fwd_flag: 填充 {before} 个缺失值为 'N'")
+
+        missing_cols = ["congestion_surcharge", "Airport_fee"]
+        for col in missing_cols:
+            before = self.df[col].isnull().sum()
+            self.df[col] = self.df[col].fillna(0)
+            print(f"  步骤9 {col}: 填充 {before} 个缺失值为 0")
+
+        fee_cols = [
+            "extra", "mta_tax", "tip_amount", "tolls_amount",
+            "improvement_surcharge", "congestion_surcharge",
+            "Airport_fee", "cbd_congestion_fee"
+        ]
+        for col in fee_cols:
+            if col in self.df.columns:
+                negative_count = (self.df[col] < 0).sum()
+                self.df[col] = self.df[col].clip(lower=0)
+                print(f"  步骤10 {col}: 裁剪 {negative_count} 个负值为 0")
+
+        amount_cols = [
+            "fare_amount", "extra", "mta_tax", "tip_amount",
+            "tolls_amount", "improvement_surcharge", "congestion_surcharge",
+            "Airport_fee", "cbd_congestion_fee"
+        ]
+        self.df["total_amount"] = self.df[amount_cols].sum(axis=1)
+        print(f"  步骤11 total_amount: 已重新计算")
+
+        print(f"\n数据清洗完成，最终数据量: {len(self.df)} 行\n")
+        return self.df
+
     def m1_run(self) -> None:
         """
-        M1 模块主流程：加载数据 → 生成报告 → 保存输出
+        M1 模块主流程：加载数据 → 生成质量报告→ 保存报告 → 数据清洗
         """
         print(f"正在加载数据: {self.data_path}")
         self.load_data()
@@ -178,6 +286,11 @@ class DataQualityAnalyzer:
         report = self.generate_report()
 
         self.save_report(report)
+
+        print("正在执行数据清洗...")
+        self.clean_data()
+
+
 
 
 if __name__ == "__main__":
