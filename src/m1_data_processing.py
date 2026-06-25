@@ -275,9 +275,78 @@ class DataQualityAnalyzer:
         print(f"\n数据清洗完成，最终数据量: {len(self.df)} 行\n")
         return self.df
 
+    def add_time_features(self) -> pd.DataFrame:
+        """
+        从行程时间中提取基础时间特征与衍生特征
+
+        Returns
+        -------
+        pd.DataFrame
+            添加特征后的 DataFrame
+        """
+        pickup_dt = pd.to_datetime(self.df["tpep_pickup_datetime"])
+
+        # 上车小时 (0-23)，用于分析各时段出行量
+        self.df["pickup_hour"] = pickup_dt.dt.hour
+        # 星期几 (0=周一, 6=周日)，用于分析工作日/周末差异
+        self.df["pickup_dayofweek"] = pickup_dt.dt.dayofweek
+        # 月份 (1-12)，用于分析月度趋势
+        self.df["pickup_month"] = pickup_dt.dt.month
+        # 日期 (1-31)，用于分析日间波动
+        self.df["pickup_day"] = pickup_dt.dt.day
+
+        # 是否周末 (周六或周日)，方便分组统计
+        self.df["is_weekend"] = self.df["pickup_dayofweek"].isin([5, 6])
+
+        # 是否高峰时段 (工作日 7:00-9:00 或 16:00-19:00)，用于分析通勤时段特征
+        self.df["is_peak_hour"] = (
+            ~self.df["is_weekend"]
+            & (
+                (self.df["pickup_hour"] >= 7) & (self.df["pickup_hour"] <= 9)
+                | (self.df["pickup_hour"] >= 16) & (self.df["pickup_hour"] <= 19)
+            )
+        )
+
+        dropoff_dt = pd.to_datetime(self.df["tpep_dropoff_datetime"])
+
+        # 行程时长(分钟)：一次行程实际耗费的时间，由下车时间减去上车时间得到
+        # 作用：结合 trip_distance 可计算速度、分析拥堵；异常值时长可为数据质量提供辅助判断
+        self.df["trip_duration_minutes"] = (
+            (dropoff_dt - pickup_dt).dt.total_seconds() / 60
+        )
+
+        valid_duration = (
+            (self.df["trip_duration_minutes"] > 0)
+            & (self.df["trip_duration_minutes"] < 180)
+        )
+
+        # 平均速度(英里/小时)：该行程的平均行驶速度，由距离 ÷ 时间计算
+        # 作用：直接反映路况拥堵程度；极低速度暗示严重拥堵或怠速等待；极高速度(>80mph)可能为数据异常
+        self.df["avg_speed_mph"] = np.nan
+        self.df.loc[valid_duration, "avg_speed_mph"] = (
+            self.df.loc[valid_duration, "trip_distance"]
+            / (self.df.loc[valid_duration, "trip_duration_minutes"] / 60)
+        )
+
+        # 小费比例：tip_amount ÷ fare_amount，反映乘客支付小费占车费的比重
+        # 作用：是乘客满意度与服务质量的代理指标——深夜/机场线小费偏高、短途小费比例偏低；
+        #       后续可视化与建模中的高价值分析变量
+        self.df["tip_ratio"] = np.nan
+        valid_fare = self.df["fare_amount"] > 0
+        self.df.loc[valid_fare, "tip_ratio"] = (
+            self.df.loc[valid_fare, "tip_amount"]
+            / self.df.loc[valid_fare, "fare_amount"]
+        )
+
+        print("基础时间特征已添加: pickup_hour, pickup_dayofweek, pickup_month, pickup_day")
+        print("基础时间特征已添加: is_weekend, is_peak_hour")
+        print("衍生特征已添加: trip_duration_minutes, avg_speed_mph, tip_ratio")
+
+        return self.df
+
     def m1_run(self) -> None:
         """
-        M1 模块主流程：加载数据 → 生成质量报告→ 保存报告 → 数据清洗
+        M1 模块主流程：加载数据 → 生成质量报告 → 保存报告 → 数据清洗 → 特征工程
         """
         print(f"正在加载数据: {self.data_path}")
         self.load_data()
@@ -289,6 +358,9 @@ class DataQualityAnalyzer:
 
         print("正在执行数据清洗...")
         self.clean_data()
+
+        print("正在提取时间特征...")
+        self.add_time_features()
 
 
 
