@@ -225,4 +225,65 @@ class TaxiVisualizer:
         print(f"  已保存: {path}")
         return path
 
+    # ================================================================
+    #  3. 地理空间可视化
+    # ================================================================
+    def plot_geospatial_map(self) -> str:
+        """
+        利用 geopandas 加载 taxi_zones.shp 绘制区域分级设色地图
+        按上车量分为5级着色
+        输出: m2_4_geospatial_map.png
+        """
+        shp_path = self.project_root / "data" / "taxi_zones.shp"
+        gdf = gpd.read_file(shp_path)
+
+        pickup_counts = self.df["PULocationID"].value_counts().reset_index()
+        pickup_counts.columns = ["LocationID", "pickup_count"]
+        gdf_merged = gdf.merge(pickup_counts, left_on="LocationID",
+                               right_on="LocationID", how="left")
+        gdf_merged["pickup_count"] = gdf_merged["pickup_count"].fillna(0)
+
+        gdf_merged["pickup_level"] = pd.cut(
+            gdf_merged["pickup_count"],
+            bins=5,
+            labels=["极低", "较低", "中等", "较高", "极高"]
+        )
+
+        fig, ax = plt.subplots(figsize=(14, 14))
+        gdf_merged.plot(
+            column="pickup_count", ax=ax, legend=True,
+            cmap="Blues", edgecolor="white", linewidth=0.3,
+            legend_kwds={
+                "label": "上车订单量",
+                "orientation": "horizontal",
+                "shrink": 0.65,
+                "pad": 0.02
+            },
+            missing_kwds={"color": "#eeeeee", "label": "无数据"}
+        )
+        ax.set_title("NYC 黄牌出租车 2026年1月 各区域上车订单量分布",
+                     fontsize=16, fontweight="bold", pad=10)
+        ax.axis("off")
+
+        top5 = pickup_counts.head(5)
+        for _, row in top5.iterrows():
+            match = gdf[gdf["LocationID"] == row["LocationID"]]
+            if len(match) > 0:
+                centroid = match.geometry.centroid.iloc[0]
+                zone_name = self.zone_lookup[
+                    self.zone_lookup["LocationID"] == row["LocationID"]
+                ]["Zone"].values[0] if self.zone_lookup is not None else str(row["LocationID"])
+                ax.annotate(zone_name, (centroid.x, centroid.y),
+                           fontsize=7, ha="center", color="red", fontweight="bold",
+                           bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
+                                    edgecolor="red", alpha=0.7))
+
+        fig.tight_layout()
+        path = str(self.output_dir / "m2_4_geospatial_map.png")
+        fig.savefig(path, dpi=200, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  已保存: {path}")
+        return path
+
+
 
