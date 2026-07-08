@@ -286,4 +286,125 @@ class TaxiVisualizer:
         return path
 
 
+    # ================================================================
+    #  4. 车费影响因素分析
+    # ================================================================
+    def plot_fare_factors(self) -> str:
+        """
+        车费影响因素: 距离-车费散点图 + 时段车费箱线图 + 乘客数-车费箱线图
+        输出: m2_3_fare_factors.png
+        """
+        df = self.df
+
+        sample = df.sample(n=min(20000, len(df)), random_state=42)
+
+        fig = plt.figure(figsize=(16, 12))
+
+        ax1 = fig.add_subplot(2, 2, (1, 2))
+        sc = ax1.scatter(sample["trip_distance"], sample["fare_amount"],
+                         c=sample["trip_duration_minutes"], cmap="viridis",
+                         alpha=0.4, s=3, vmin=0, vmax=60)
+        cbar = fig.colorbar(sc, ax=ax1, shrink=0.7)
+        cbar.set_label("行程时长(分钟)", fontsize=10)
+        ax1.set_xlabel("行程距离(英里)", fontsize=12)
+        ax1.set_ylabel("车费($)", fontsize=12)
+        ax1.set_title("行程距离 vs 车费 散点图 (N=20,000 随机样本)", fontsize=14, fontweight="bold")
+        ax1.set_xlim(0, sample["trip_distance"].quantile(0.99))
+        ax1.set_ylim(0, sample["fare_amount"].quantile(0.99))
+        ax1.grid(True, alpha=0.2)
+        z = np.polyfit(sample["trip_distance"].dropna(), sample["fare_amount"].dropna(), 1)
+        p = np.poly1d(z)
+        x_range = np.linspace(0, sample["trip_distance"].max(), 100)
+        ax1.plot(x_range, p(x_range), "r--", linewidth=1.5, alpha=0.8, label="趋势线")
+        ax1.legend(fontsize=10)
+
+        ax2 = fig.add_subplot(2, 2, 3)
+        df_period = df.copy()
+        conditions = [
+            df_period["is_peak_hour"],
+            df_period["is_weekend"],
+        ]
+        default = "非高峰工作日"
+        df_period["time_period"] = np.select(
+            [conditions[0], conditions[1] & ~conditions[0]],
+            ["高峰时段", "周末"],
+            default
+        )
+
+        order = ["高峰时段", "非高峰工作日", "周末"]
+        colors_period = {"高峰时段": "#E53935", "非高峰工作日": "#2196F3", "周末": "#4CAF50"}
+        bp2 = df_period.boxplot(
+            column="fare_amount", by="time_period", ax=ax2,
+            patch_artist=True, showfliers=False, widths=0.55
+        )
+        for patch, label in zip(
+            [item for item in bp2.artists],
+            [item.get_text() for item in ax2.get_xticklabels()]
+        ):
+            if label in colors_period:
+                patch.set_facecolor(colors_period[label])
+                patch.set_alpha(0.7)
+        medians = df_period.groupby("time_period")["fare_amount"].median()
+        for i, period in enumerate(medians.index):
+            ax2.text(i + 1, medians[period] + 1, f"${medians[period]:.1f}",
+                     ha="center", fontsize=9, fontweight="bold", color="black")
+        ax2.set_title("不同时段 车费分布", fontsize=14, fontweight="bold")
+        ax2.set_xlabel("时段", fontsize=12)
+        ax2.set_ylabel("车费($)", fontsize=12)
+        ax2.set_xticklabels(medians.index, fontsize=10)
+        fig.delaxes(fig.axes[-1]) if len(fig.axes) > 3 else None
+        ax2.grid(True, alpha=0.3, axis="y")
+
+        ax3 = fig.add_subplot(2, 2, 4)
+        df_pax = df[df["passenger_count"].between(1, 5)]
+        pax_data = [df_pax[df_pax["passenger_count"] == i]["fare_amount"].dropna()
+                    for i in range(1, 6)]
+        bp3 = ax3.boxplot(pax_data, patch_artist=True, showfliers=False, widths=0.55)
+        colors_pax = sns.color_palette("Set2", 5)
+        for patch, color in zip(bp3["boxes"], colors_pax):
+            patch.set_facecolor(color)
+            patch.set_alpha(0.8)
+        pax_medians = df_pax.groupby("passenger_count")["fare_amount"].median()
+        for i, val in enumerate(pax_medians.values):
+            ax3.text(i + 1, val + 1, f"${val:.1f}",
+                     ha="center", fontsize=9, fontweight="bold", color="black")
+        ax3.set_title("乘客人数 vs 车费分布", fontsize=14, fontweight="bold")
+        ax3.set_xlabel("乘客人数", fontsize=12)
+        ax3.set_ylabel("车费($)", fontsize=12)
+        ax3.set_xticklabels([f"{i}人" for i in range(1, 6)], fontsize=10)
+        ax3.grid(True, alpha=0.3, axis="y")
+
+        fig.suptitle("NYC 黄牌出租车 车费影响因素分析", fontsize=16, fontweight="bold", y=1.01)
+        fig.tight_layout()
+        path = str(self.output_dir / "m2_3_fare_factors.png")
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  已保存: {path}")
+        return path
+
+
+    # ================================================================
+    #  主流程
+    # ================================================================
+    def m2_run(self) -> None:
+        """M2 主流程：依次生成所有可视化图表"""
+        print("\n" + "=" * 50)
+        print("  M2 数据可视化")
+        print("=" * 50)
+
+        print("\n[1/4] 出行需求时间规律...")
+        self.plot_demand_time()
+
+        print("\n[2/4] 区域热度分析...")
+        self.plot_zone_popularity()
+        self.plot_zone_hourly_heatmap()
+
+        print("\n[3/4] 车费影响因素分析...")
+        self.plot_fare_factors()
+
+        print("\n[4/4] 地理空间可视化...")
+        self.plot_geospatial_map()
+
+        print("\nM2 可视化全部完成！")
+
 
