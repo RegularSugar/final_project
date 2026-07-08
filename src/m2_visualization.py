@@ -249,7 +249,14 @@ class TaxiVisualizer:
             labels=["极低", "较低", "中等", "较高", "极高"]
         )
 
-        fig, ax = plt.subplots(figsize=(14, 14))
+        top_n_zones = pickup_counts.head(40)["LocationID"].tolist()
+        focus_gdf = gdf[gdf["LocationID"].isin(top_n_zones)]
+        minx, miny, maxx, maxy = focus_gdf.total_bounds
+        pad_x = (maxx - minx) * 0.15
+        pad_y = (maxy - miny) * 0.15
+        focus_bounds = (minx - pad_x, miny - pad_y, maxx + pad_x, maxy + pad_y)
+
+        fig, ax = plt.subplots(figsize=(12, 12))
         gdf_merged.plot(
             column="pickup_count", ax=ax, legend=True,
             cmap="Blues", edgecolor="white", linewidth=0.3,
@@ -261,7 +268,9 @@ class TaxiVisualizer:
             },
             missing_kwds={"color": "#eeeeee", "label": "无数据"}
         )
-        ax.set_title("NYC 黄牌出租车 2026年1月 各区域上车订单量分布",
+        ax.set_xlim(focus_bounds[0], focus_bounds[2])
+        ax.set_ylim(focus_bounds[1], focus_bounds[3])
+        ax.set_title("NYC 黄牌出租车 2026年1月 核心区域上车订单量分布",
                      fontsize=16, fontweight="bold", pad=10)
         ax.axis("off")
 
@@ -270,13 +279,15 @@ class TaxiVisualizer:
             match = gdf[gdf["LocationID"] == row["LocationID"]]
             if len(match) > 0:
                 centroid = match.geometry.centroid.iloc[0]
-                zone_name = self.zone_lookup[
-                    self.zone_lookup["LocationID"] == row["LocationID"]
-                ]["Zone"].values[0] if self.zone_lookup is not None else str(row["LocationID"])
-                ax.annotate(zone_name, (centroid.x, centroid.y),
-                           fontsize=7, ha="center", color="red", fontweight="bold",
-                           bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
-                                    edgecolor="red", alpha=0.7))
+                cx, cy = centroid.x, centroid.y
+                if focus_bounds[0] <= cx <= focus_bounds[2] and focus_bounds[1] <= cy <= focus_bounds[3]:
+                    zone_name = self.zone_lookup[
+                        self.zone_lookup["LocationID"] == row["LocationID"]
+                    ]["Zone"].values[0] if self.zone_lookup is not None else str(row["LocationID"])
+                    ax.annotate(zone_name, (cx, cy),
+                               fontsize=8, ha="center", color="red", fontweight="bold",
+                               bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
+                                        edgecolor="red", alpha=0.7))
 
         fig.tight_layout()
         path = str(self.output_dir / "m2_4_geospatial_map.png")
@@ -382,6 +393,154 @@ class TaxiVisualizer:
         print(f"  已保存: {path}")
         return path
 
+    # ================================================================
+    #  5. 费率类型深度分析（最有洞察价值的补充分析）
+    # ================================================================
+    def plot_ratecode_analysis(self) -> str:
+        """
+        不同费率类型（RatecodeID）的行程特征对比。
+
+        分析洞察：
+            NYC 黄牌出租车有 6 种官方费率码，分别对应不同的定价规则：
+            - 1=标准费率（绝大多数市区行程）
+            - 2=JFK 机场（固定费率，从曼哈顿到 JFK 机场，2026年约 $70-80）
+            - 3=Newark 机场（同上，到 Newark 机场，里程更长）
+            - 4=Nassau/Westchester（郊区长途，按表计价）
+            - 5=议价行程（司机与乘客在上车前谈好价格）
+            - 6=拼车行程（多人共享一辆车，分摊费用）
+
+            不同费率码的行程在距离、费用、小费上的差异极其显著，
+            理解这种结构性差异是优化定价策略、预估收入的关键。
+
+        输出: m2_5_ratecode_analysis.png
+        """
+        df = self.df.copy()
+
+        ratecode_labels = {
+            1: "标准费率",
+            2: "JFK机场",
+            3: "Newark机场",
+            4: "Nassau/\nWestchester",
+            5: "议价行程",
+            6: "拼车行程",
+        }
+        df["ratecode_label"] = df["RatecodeID"].map(ratecode_labels)
+
+        valid_rc = df["RatecodeID"].isin(ratecode_labels.keys())
+        df_rc = df[valid_rc].copy()
+
+        rc_order = [1, 2, 3, 4, 5, 6]
+
+        fig = plt.figure(figsize=(18, 12))
+
+        # ---- 子图1: 费率类型订单占比（左上） ----
+        ax1 = fig.add_subplot(2, 3, 1)
+        rc_counts = df_rc["RatecodeID"].value_counts().reindex(rc_order)
+        colors_pie = sns.color_palette("Set2", 6)
+        wedges, texts, autotexts = ax1.pie(
+            rc_counts.values, labels=None, autopct="%1.1f%%",
+            colors=colors_pie, startangle=90, pctdistance=0.6,
+            textprops={"fontsize": 10}
+        )
+        for autotext in autotexts:
+            autotext.set_fontweight("bold")
+        ax1.set_title("各费率类型 订单占比", fontsize=14, fontweight="bold")
+
+        # ---- 子图2: 费率类型图例（右上） ----
+        ax2 = fig.add_subplot(2, 3, 2)
+        ax2.axis("off")
+        legend_text = "\n".join([
+            f"{k}= {v}" for k, v in ratecode_labels.items()
+        ])
+        ax2.text(0.05, 0.95, legend_text,
+                 transform=ax2.transAxes, fontsize=11, verticalalignment="top",
+                 bbox=dict(boxstyle="round,pad=0.8", facecolor="#F5F5F5", edgecolor="#CCCCCC"))
+
+        # ---- 子图3: 各费率类型行程距离分布（右上） ----
+        ax3 = fig.add_subplot(2, 3, 3)
+        rc_distance_data = [df_rc[df_rc["RatecodeID"] == rc]["trip_distance"].dropna()
+                           for rc in rc_order]
+        bp3 = ax3.boxplot(rc_distance_data, patch_artist=True, showfliers=False, widths=0.55)
+        for patch, color in zip(bp3["boxes"], colors_pie):
+            patch.set_facecolor(color)
+            patch.set_alpha(0.8)
+        dist_medians = [s.median() if len(s) > 0 else 0 for s in rc_distance_data]
+        for i, val in enumerate(dist_medians):
+            ax3.text(i + 1, val + 1, f"{val:.1f}mi",
+                     ha="center", fontsize=9, fontweight="bold", color="black")
+        ax3.set_title("各费率类型 行程距离分布", fontsize=14, fontweight="bold")
+        ax3.set_xlabel("费率类型", fontsize=12)
+        ax3.set_ylabel("行程距离(英里)", fontsize=12)
+        ax3.set_xticklabels([ratecode_labels[rc] for rc in rc_order], fontsize=8)
+        ax3.grid(True, alpha=0.3, axis="y")
+
+        # ---- 子图4: 各费率类型平均车费（左下） ----
+        ax4 = fig.add_subplot(2, 3, 4)
+        fare_means = [df_rc[df_rc["RatecodeID"] == rc]["fare_amount"].mean() for rc in rc_order]
+        fare_medians = [df_rc[df_rc["RatecodeID"] == rc]["fare_amount"].median() for rc in rc_order]
+        x = range(len(rc_order))
+        width = 0.35
+        bars1 = ax4.bar([i - width / 2 for i in x], fare_means, width,
+                        color="#2196F3", alpha=0.7, label="均值", edgecolor="white")
+        bars2 = ax4.bar([i + width / 2 for i in x], fare_medians, width,
+                        color="#F44336", alpha=0.7, label="中位数", edgecolor="white")
+        for bar, val in zip(bars1, fare_means):
+            ax4.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
+                     f"${val:.0f}", ha="center", fontsize=8, fontweight="bold", color="#1565C0")
+        for bar, val in zip(bars2, fare_medians):
+            ax4.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
+                     f"${val:.0f}", ha="center", fontsize=8, fontweight="bold", color="#C62828")
+        ax4.set_title("各费率类型 车费均值/中位数", fontsize=14, fontweight="bold")
+        ax4.set_xlabel("费率类型", fontsize=12)
+        ax4.set_ylabel("车费($)", fontsize=12)
+        ax4.set_xticks(x)
+        ax4.set_xticklabels([ratecode_labels[rc] for rc in rc_order], fontsize=8)
+        ax4.legend(fontsize=9)
+        ax4.grid(True, alpha=0.3, axis="y")
+
+        # ---- 子图5: 各费率类型小费比例（中下） ----
+        ax5 = fig.add_subplot(2, 3, 5)
+        valid_tip = df_rc["tip_ratio"].notna() & (df_rc["tip_ratio"] < 1)
+        tip_data = [df_rc.loc[valid_tip & (df_rc["RatecodeID"] == rc), "tip_ratio"]
+                    for rc in rc_order]
+        bp5 = ax5.boxplot(tip_data, patch_artist=True, showfliers=False, widths=0.55)
+        for patch, color in zip(bp5["boxes"], colors_pie):
+            patch.set_facecolor(color)
+            patch.set_alpha(0.8)
+        tip_medians = [s.median() * 100 if len(s) > 0 else 0 for s in tip_data]
+        for i, val in enumerate(tip_medians):
+            ax5.text(i + 1, (tip_data[i].median() if len(tip_data[i]) > 0 else 0) + 0.005,
+                     f"{val:.1f}%", ha="center", fontsize=9, fontweight="bold", color="black")
+        ax5.set_title("各费率类型 小费比例分布", fontsize=14, fontweight="bold")
+        ax5.set_xlabel("费率类型", fontsize=12)
+        ax5.set_ylabel("小费比例", fontsize=12)
+        ax5.set_xticklabels([ratecode_labels[rc] for rc in rc_order], fontsize=8)
+        ax5.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: f"{y:.0%}"))
+        ax5.grid(True, alpha=0.3, axis="y")
+
+        # ---- 子图6: 行程数量（右下） ----
+        ax6 = fig.add_subplot(2, 3, 6)
+        bars6 = ax6.bar(x, [rc_counts.get(rc, 0) for rc in rc_order],
+                        color=colors_pie, edgecolor="white")
+        ax6.set_title("各费率类型 行程数量", fontsize=14, fontweight="bold")
+        ax6.set_xlabel("费率类型", fontsize=12)
+        ax6.set_ylabel("行程数量", fontsize=12)
+        ax6.set_xticks(x)
+        ax6.set_xticklabels([ratecode_labels[rc] for rc in rc_order], fontsize=8)
+        ax6.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: f"{y:,.0f}"))
+        for bar, val in zip(bars6, [rc_counts.get(rc, 0) for rc in rc_order]):
+            ax6.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + max(rc_counts.values) * 0.01,
+                     f"{val:,}", ha="center", fontsize=8, fontweight="bold")
+        ax6.grid(True, alpha=0.3, axis="y")
+
+        fig.suptitle("NYC 黄牌出租车 费率类型深度分析（不同费率码的行程特征对比）",
+                     fontsize=20, fontweight="bold", y=1.03)
+        fig.tight_layout()
+        path = str(self.output_dir / "m2_5_ratecode_analysis.png")
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  已保存: {path}")
+        return path
 
     # ================================================================
     #  主流程
@@ -392,18 +551,21 @@ class TaxiVisualizer:
         print("  M2 数据可视化")
         print("=" * 50)
 
-        print("\n[1/4] 出行需求时间规律...")
+        print("\n[1/5] 出行需求时间规律...")
         self.plot_demand_time()
 
-        print("\n[2/4] 区域热度分析...")
+        print("\n[2/5] 区域热度分析...")
         self.plot_zone_popularity()
         self.plot_zone_hourly_heatmap()
 
-        print("\n[3/4] 车费影响因素分析...")
+        print("\n[3/5] 车费影响因素分析...")
         self.plot_fare_factors()
 
-        print("\n[4/4] 地理空间可视化...")
+        print("\n[4/5] 地理空间可视化...")
         self.plot_geospatial_map()
+
+        print("\n[5/5] 费率类型深度分析...")
+        self.plot_ratecode_analysis()
 
         print("\nM2 可视化全部完成！")
 
