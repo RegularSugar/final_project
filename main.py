@@ -6,6 +6,7 @@ main.py
 
 from src.m1_data_processing import DataQualityAnalyzer
 from src.m2_visualization import TaxiVisualizer
+from src.m3_modeling import DemandPredictor
 
 
 def main():
@@ -29,6 +30,12 @@ def main():
     # ========================
     viz = TaxiVisualizer(df_cleaned)
     viz.m2_run()
+
+    # ========================
+    #  M3: 出行需求预测建模
+    # ========================
+    predictor = DemandPredictor(df_cleaned)
+    predictor.m3_run()
 
 
 
