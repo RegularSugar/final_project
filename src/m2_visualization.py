@@ -135,4 +135,94 @@ class TaxiVisualizer:
         print(f"  已保存: {path}")
         return path
 
+    # ================================================================
+    #  2. 区域热度分析
+    # ================================================================
+    def plot_zone_popularity(self) -> str:
+        """
+        上下客量 TOP10 区域柱状图
+        输出: m2_2_zone_popularity.png
+        """
+        df = self.df
+
+        pickup_counts = df["PULocationID"].value_counts().head(10)
+        dropoff_counts = df["DOLocationID"].value_counts().head(10)
+
+        pickup_names = self._zone_name(pickup_counts.index)
+        dropoff_names = self._zone_name(dropoff_counts.index)
+
+        fig, axes = plt.subplots(1, 2, figsize=(16, 7))
+
+        colors_pickup = sns.color_palette("Blues_d", len(pickup_counts))[::-1]
+        ax1 = axes[0]
+        bars1 = ax1.barh(range(len(pickup_counts)), pickup_counts.values, color=colors_pickup, edgecolor="white")
+        ax1.set_yticks(range(len(pickup_counts)))
+        ax1.set_yticklabels(pickup_names.values, fontsize=9)
+        ax1.invert_yaxis()
+        ax1.set_xlabel("订单量", fontsize=12)
+        ax1.set_title("上车量 TOP 10 区域", fontsize=14, fontweight="bold")
+        ax1.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
+        for bar, val in zip(bars1, pickup_counts.values):
+            ax1.text(bar.get_width() + max(pickup_counts.values) * 0.005,
+                     bar.get_y() + bar.get_height() / 2,
+                     f"{val:,}", va="center", fontsize=8, color="black")
+
+        colors_dropoff = sns.color_palette("Oranges_d", len(dropoff_counts))[::-1]
+        ax2 = axes[1]
+        bars2 = ax2.barh(range(len(dropoff_counts)), dropoff_counts.values, color=colors_dropoff, edgecolor="white")
+        ax2.set_yticks(range(len(dropoff_counts)))
+        ax2.set_yticklabels(dropoff_names.values, fontsize=9)
+        ax2.invert_yaxis()
+        ax2.set_xlabel("订单量", fontsize=12)
+        ax2.set_title("下车量 TOP 10 区域", fontsize=14, fontweight="bold")
+        ax2.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
+        for bar, val in zip(bars2, dropoff_counts.values):
+            ax2.text(bar.get_width() + max(dropoff_counts.values) * 0.005,
+                     bar.get_y() + bar.get_height() / 2,
+                     f"{val:,}", va="center", fontsize=8, color="black")
+
+        fig.suptitle("NYC 黄牌出租车 区域热度分析", fontsize=16, fontweight="bold", y=1.01)
+        fig.tight_layout()
+        path = str(self.output_dir / "m2_2_zone_popularity.png")
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  已保存: {path}")
+        return path
+
+    def plot_zone_hourly_heatmap(self, top_n: int = 8) -> str:
+        """
+        热门上车区域 × 小时 订单量热力图
+        输出: m2_2_zone_heatmap.png
+        """
+        df = self.df
+
+        top_zones = df["PULocationID"].value_counts().head(top_n).index.tolist()
+        zone_names = self._zone_name(pd.Series(top_zones))
+
+        heat_data = df[df["PULocationID"].isin(top_zones)]
+        pivot = heat_data.pivot_table(
+            index="PULocationID", columns="pickup_hour",
+            values="trip_distance", aggfunc="count"
+        )
+        pivot = pivot.reindex(top_zones)
+        pivot.index = zone_names.values
+
+        fig, ax = plt.subplots(figsize=(16, 6))
+        sns.heatmap(pivot, cmap="YlOrRd", annot=True, fmt=".0f",
+                    linewidths=0.5, linecolor="white",
+                    cbar_kws={"label": "订单量", "shrink": 0.85},
+                    xticklabels=[f"{h}:00" for h in range(24)],
+                    ax=ax)
+        ax.set_title(f"热门上车区域 TOP{top_n} 分小时订单量热力图", fontsize=14, fontweight="bold")
+        ax.set_xlabel("小时", fontsize=12)
+        ax.set_ylabel("区域", fontsize=12)
+        ax.tick_params(axis="both", labelsize=8)
+
+        fig.tight_layout()
+        path = str(self.output_dir / "m2_2_zone_heatmap.png")
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  已保存: {path}")
+        return path
+
 
