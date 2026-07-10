@@ -37,7 +37,7 @@ final_project/
 ├── main.py                     # 主入口
 ├── requirements.txt            # Python 依赖
 ├── .gitignore                  # Git 忽略配置
-└── README.md                   # 本文件
+└── README.md                   # 项目说明
 ```
 
 ## 环境要求
