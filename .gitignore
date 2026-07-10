@@ -1,0 +1,22 @@
+# 环境变量（包含 API Key）
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 数据文件（太大，不上传）
+data/*.parquet
+data/*.shp
+data/*.shx
+data/*.dbf
+data/*.prj
+
+# 输出文件
+outputs/*.png
+outputs/*.csv
+
+# IDE
+.vscode/
+.idea/
