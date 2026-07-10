@@ -58,15 +58,15 @@ class TaxiVisualizer:
         self.df = df.copy()
         self.output_dir = self.project_root / "outputs"
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.zone_lookup = self._load_zone_lookup()
+        self.zone_lookup: pd.DataFrame | None = self._load_zone_lookup()
 
-    def _load_zone_lookup(self) -> pd.DataFrame:
+    def _load_zone_lookup(self) -> pd.DataFrame | None:
         path = self.project_root / "data" / "taxi_zone_lookup.csv"
         if path.exists():
             return pd.read_csv(path)
         return None
 
-    def _zone_name(self, loc_ids: pd.Series) -> pd.Series:
+    def _zone_name(self, loc_ids) -> pd.Series:
         if self.zone_lookup is None:
             return pd.Series(loc_ids).astype(str)
         mapping = dict(zip(self.zone_lookup["LocationID"], self.zone_lookup["Zone"]))
@@ -153,33 +153,25 @@ class TaxiVisualizer:
 
         fig, axes = plt.subplots(1, 2, figsize=(16, 7))
 
-        colors_pickup = sns.color_palette("Blues_d", len(pickup_counts))[::-1]
-        ax1 = axes[0]
-        bars1 = ax1.barh(range(len(pickup_counts)), pickup_counts.values, color=colors_pickup, edgecolor="white")
-        ax1.set_yticks(range(len(pickup_counts)))
-        ax1.set_yticklabels(pickup_names.values, fontsize=9)
-        ax1.invert_yaxis()
-        ax1.set_xlabel("订单量", fontsize=12)
-        ax1.set_title("上车量 TOP 10 区域", fontsize=14, fontweight="bold")
-        ax1.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
-        for bar, val in zip(bars1, pickup_counts.values):
-            ax1.text(bar.get_width() + max(pickup_counts.values) * 0.005,
-                     bar.get_y() + bar.get_height() / 2,
-                     f"{val:,}", va="center", fontsize=8, color="black")
+        def plot_barh_top(ax, counts, names, title, palette):
+            colors = sns.color_palette(palette, len(counts))[::-1]
+            bars = ax.barh(range(len(counts)), counts.values, color=colors, edgecolor="white")
+            ax.set_yticks(range(len(counts)))
+            ax.set_yticklabels(names.values, fontsize=9)
+            ax.invert_yaxis()
+            ax.set_xlabel("订单量", fontsize=12)
+            ax.set_title(title, fontsize=14, fontweight="bold")
+            ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
+            for bar, val in zip(bars, counts.values):
+                ax.text(bar.get_width() + max(counts.values) * 0.005,
+                         bar.get_y() + bar.get_height() / 2,
+                         f"{val:,}", va="center", fontsize=8, color="black")
 
-        colors_dropoff = sns.color_palette("Oranges_d", len(dropoff_counts))[::-1]
+        ax1 = axes[0]
+        plot_barh_top(ax1, pickup_counts, pickup_names, "上车量 TOP 10 区域", "Blues_d")
+
         ax2 = axes[1]
-        bars2 = ax2.barh(range(len(dropoff_counts)), dropoff_counts.values, color=colors_dropoff, edgecolor="white")
-        ax2.set_yticks(range(len(dropoff_counts)))
-        ax2.set_yticklabels(dropoff_names.values, fontsize=9)
-        ax2.invert_yaxis()
-        ax2.set_xlabel("订单量", fontsize=12)
-        ax2.set_title("下车量 TOP 10 区域", fontsize=14, fontweight="bold")
-        ax2.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
-        for bar, val in zip(bars2, dropoff_counts.values):
-            ax2.text(bar.get_width() + max(dropoff_counts.values) * 0.005,
-                     bar.get_y() + bar.get_height() / 2,
-                     f"{val:,}", va="center", fontsize=8, color="black")
+        plot_barh_top(ax2, dropoff_counts, dropoff_names, "下车量 TOP 10 区域", "Oranges_d")
 
         fig.suptitle("NYC 黄牌出租车 区域热度分析", fontsize=16, fontweight="bold", y=1.01)
         fig.tight_layout()
@@ -278,8 +270,9 @@ class TaxiVisualizer:
         for _, row in top5.iterrows():
             match = gdf[gdf["LocationID"] == row["LocationID"]]
             if len(match) > 0:
-                centroid = match.geometry.centroid.iloc[0]
-                cx, cy = centroid.x, centroid.y
+                geom_centroid = match.geometry.centroid
+                centroid = geom_centroid.iloc[0]
+                cx, cy = float(centroid.x), float(centroid.y)
                 if focus_bounds[0] <= cx <= focus_bounds[2] and focus_bounds[1] <= cy <= focus_bounds[3]:
                     zone_name = self.zone_lookup[
                         self.zone_lookup["LocationID"] == row["LocationID"]
@@ -309,7 +302,7 @@ class TaxiVisualizer:
 
         sample = df.sample(n=min(20000, len(df)), random_state=42)
 
-        fig = plt.figure(figsize=(16, 12))
+        fig = plt.figure(figsize=(float(16), float(12)))
 
         ax1 = fig.add_subplot(2, 2, (1, 2))
         sc = ax1.scatter(sample["trip_distance"], sample["fare_amount"],
@@ -342,28 +335,27 @@ class TaxiVisualizer:
             default
         )
 
-        order = ["高峰时段", "非高峰工作日", "周末"]
         colors_period = {"高峰时段": "#E53935", "非高峰工作日": "#2196F3", "周末": "#4CAF50"}
         bp2 = df_period.boxplot(
             column="fare_amount", by="time_period", ax=ax2,
             patch_artist=True, showfliers=False, widths=0.55
         )
-        for patch, label in zip(
-            [item for item in bp2.artists],
-            [item.get_text() for item in ax2.get_xticklabels()]
-        ):
+        for i, patch in enumerate(bp2.artists):
+            label = ax2.get_xticklabels()[i].get_text()
             if label in colors_period:
                 patch.set_facecolor(colors_period[label])
                 patch.set_alpha(0.7)
         medians = df_period.groupby("time_period")["fare_amount"].median()
         for i, period in enumerate(medians.index):
-            ax2.text(i + 1, medians[period] + 1, f"${medians[period]:.1f}",
+            median_val = float(medians[period])
+            ax2.text(i + 1, median_val + 1, f"${median_val:.1f}",
                      ha="center", fontsize=9, fontweight="bold", color="black")
         ax2.set_title("不同时段 车费分布", fontsize=14, fontweight="bold")
         ax2.set_xlabel("时段", fontsize=12)
         ax2.set_ylabel("车费($)", fontsize=12)
         ax2.set_xticklabels(medians.index, fontsize=10)
-        fig.delaxes(fig.axes[-1]) if len(fig.axes) > 3 else None
+        if len(fig.axes) > 3:
+            fig.delaxes(fig.axes[-1])
         ax2.grid(True, alpha=0.3, axis="y")
 
         ax3 = fig.add_subplot(2, 2, 4)
@@ -412,7 +404,7 @@ class TaxiVisualizer:
             不同费率码的行程在距离、费用、小费上的差异极其显著，
             理解这种结构性差异是优化定价策略、预估收入的关键。
 
-        输出: m2_5_ratecode_analysis.png
+        输出: m2_4_ratecode_analysis.png
         """
         df = self.df.copy()
 
@@ -431,7 +423,7 @@ class TaxiVisualizer:
 
         rc_order = [1, 2, 3, 4, 5, 6]
 
-        fig = plt.figure(figsize=(18, 12))
+        fig = plt.figure(figsize=(float(18), float(12)))
 
         # ---- 子图1: 费率类型订单占比（左上） ----
         ax1 = fig.add_subplot(2, 3, 1)
@@ -536,7 +528,7 @@ class TaxiVisualizer:
         fig.suptitle("NYC 黄牌出租车 费率类型深度分析（不同费率码的行程特征对比）",
                      fontsize=20, fontweight="bold", y=1.03)
         fig.tight_layout()
-        path = str(self.output_dir / "m2_5_ratecode_analysis.png")
+        path = str(self.output_dir / "m2_4_ratecode_analysis.png")
         fig.savefig(path, dpi=150, bbox_inches="tight")
         plt.close(fig)
         print(f"  已保存: {path}")

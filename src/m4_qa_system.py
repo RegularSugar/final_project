@@ -68,6 +68,7 @@ class QASystem:
 
         self.df = df.copy()
         self.zone_lookup: pd.DataFrame | None = self._load_zone_lookup()
+        self.stats: dict = {}
         self._precompute_stats()
 
         # LLM 配置：优先从环境变量读取，Gradio 界面可覆盖
@@ -83,7 +84,7 @@ class QASystem:
             "区域热力图": "outputs/m2_2_zone_heatmap.png",
             "车费因素": "outputs/m2_3_fare_factors.png",
             "地理地图": "outputs/m2_4_geospatial_map.png",
-            "费率分析": "outputs/m2_5_ratecode_analysis.png",
+            "费率分析": "outputs/m2_4_ratecode_analysis.png",
             "质量报告": "outputs/data_quality_report.csv",
             "模型指标": "outputs/m3_model_metrics.csv",
             "Loss曲线": "outputs/m3_neural_network_loss.png",
@@ -205,15 +206,22 @@ class QASystem:
     # ================================================================
     #  实体提取
     # ================================================================
-    def _extract_time_params(self, q: str) -> dict:
-        params = {}
+    @staticmethod
+    def _parse_hour(q: str) -> int | None:
         hour_match = re.search(r"(\d{1,2})\s*点", q)
-        if hour_match:
-            hour = int(hour_match.group(1))
-            if "下午" in q or "晚上" in q:
-                if hour < 12:
-                    hour += 12
-            params["hour"] = min(hour, 23)
+        if not hour_match:
+            return None
+        hour = int(hour_match.group(1))
+        if ("下午" in q or "晚上" in q) and hour < 12:
+            hour += 12
+        return min(hour, 23)
+
+    @staticmethod
+    def _extract_time_params(q: str) -> dict:
+        params: dict = {}
+        hour = QASystem._parse_hour(q)
+        if hour is not None:
+            params["hour"] = hour
         if "周末" in q:
             params["is_weekend"] = True
         elif "工作日" in q:
@@ -222,43 +230,44 @@ class QASystem:
             params["is_peak"] = True
         return params
 
-    def _extract_zone_params(self, q: str) -> dict:
-        params = {"top_n": 10}
-        top_match = re.search(r"top\s*(\d+)", q)
+    @staticmethod
+    def _extract_zone_params(q: str) -> dict:
+        params: dict = {"top_n": 10}
+        top_match = re.search(r"top\s*(\d+)", q, re.IGNORECASE)
         if top_match:
             params["top_n"] = int(top_match.group(1))
         num_match = re.search(r"前\s*(\d+)", q)
         if num_match:
             params["top_n"] = int(num_match.group(1))
-        params["direction"] = "dropoff" if ("下车" in q or "dropoff" in q) else "pickup"
+        params["direction"] = "dropoff" if ("下车" in q or "dropoff" in q.lower()) else "pickup"
         return params
 
-    def _extract_prediction_params(self, q: str) -> dict:
-        params = {}
+    @staticmethod
+    def _extract_prediction_params(q: str) -> dict:
+        params: dict = {}
         zone_match = re.search(r"区域\s*(\d+)", q)
         if zone_match:
             params["zone_id"] = int(zone_match.group(1))
-        hour_match = re.search(r"(\d{1,2})\s*点", q)
-        if hour_match:
-            hour = int(hour_match.group(1))
-            if "下午" in q or "晚上" in q:
-                if hour < 12:
-                    hour += 12
-            params["hour"] = min(hour, 23)
+        hour = QASystem._parse_hour(q)
+        if hour is not None:
+            params["hour"] = hour
         return params
 
-    def _extract_fare_params(self, q: str) -> dict:
-        params = {}
+    @staticmethod
+    def _extract_fare_params(q: str) -> dict:
+        params: dict = {}
         dist_match = re.search(r"(\d+)\s*英里", q)
         if dist_match:
             params["distance"] = float(dist_match.group(1))
         return params
 
-    def _extract_ratecode_params(self, q: str) -> dict:
-        params = {}
-        if "jfk" in q.lower():
+    @staticmethod
+    def _extract_ratecode_params(q: str) -> dict:
+        params: dict = {}
+        q_lower = q.lower()
+        if "jfk" in q_lower:
             params["ratecode"] = 2
-        elif "newark" in q.lower():
+        elif "newark" in q_lower:
             params["ratecode"] = 3
         elif "拼车" in q:
             params["ratecode"] = 6
@@ -272,9 +281,9 @@ class QASystem:
     def answer_time_demand(self, entities: dict) -> str:
         """时段需求查询：按小时/工作日/周末聚合统计，返回订单量 + 图表引用"""
         df = self.df
-        hour = entities.get("hour")
-        is_weekend = entities.get("is_weekend")
-        is_peak = entities.get("is_peak")
+        hour: int | None = entities.get("hour")
+        is_weekend: bool | None = entities.get("is_weekend")
+        is_peak: bool | None = entities.get("is_peak")
         s = self.stats
 
         lines = ["## 出行需求时间分析\n"]
@@ -283,7 +292,7 @@ class QASystem:
             mask = df["pickup_hour"] == hour
             if is_weekend is not None:
                 mask &= df["is_weekend"] == is_weekend
-            count = mask.sum()
+            count = int(mask.sum())
             label = f"{hour}:00"
             if is_weekend is True:
                 label += "（周末）"
@@ -306,8 +315,8 @@ class QASystem:
     def answer_zone_ranking(self, entities: dict) -> str:
         """区域热度排名：按 PULocationID/DOLocationID 聚合取 TOP N"""
         df = self.df
-        top_n = entities.get("top_n", 10)
-        direction = entities.get("direction", "pickup")
+        top_n: int = entities.get("top_n", 10)
+        direction: str = entities.get("direction", "pickup")
         col = "PULocationID" if direction == "pickup" else "DOLocationID"
         label = "上车" if direction == "pickup" else "下车"
 
@@ -316,7 +325,7 @@ class QASystem:
         lines.append("| 排名 | 区域 | 订单量 |")
         lines.append("|------|------|--------|")
         for i, (loc_id, count) in enumerate(top.items(), 1):
-            lines.append(f"| {i} | {self._zone_name(loc_id)} | {count:,} |")
+            lines.append(f"| {i} | {self._zone_name(int(loc_id))} | {int(count):,} |")
         lines.append(f"\n> 详情可查看图表: `{self.chart_map['区域热度']}`")
         return "\n".join(lines)
 
@@ -327,15 +336,15 @@ class QASystem:
         如果 M3 模型已训练并保存，优先用模型预测；否则用历史均值作为近似。
         同时附上模型性能指标（MAE/RMSE）供参考。
         """
-        zone_id = entities.get("zone_id", 100)
-        hour = entities.get("hour", 15)
+        zone_id: int = entities.get("zone_id", 100)
+        hour: int = entities.get("hour", 15)
         lines = [f"## 需求预测: 区域 {zone_id} ({self._zone_name(zone_id)}), {hour}:00\n"]
 
         mask = (self.df["PULocationID"] == zone_id) & (self.df["pickup_hour"] == hour)
-        historical = mask.sum()
+        historical = int(mask.sum())
 
         if historical > 0:
-            daily_avg = historical / self.df["pickup_day"].nunique()
+            daily_avg = float(historical) / float(self.df["pickup_day"].nunique())
             lines.append(f"该区域在 {hour}:00 的历史日均订单量约为 **{daily_avg:.0f}** 单。")
             lines.append(f"历史同区域同小时总订单量: **{historical:,}** 单。")
         else:
@@ -359,7 +368,7 @@ class QASystem:
         估算公式：fare ≈ 2.5 + 3.0 × distance（基于数据中标准费率的回归拟合）。
         """
         s = self.stats
-        distance = entities.get("distance")
+        distance: float | None = entities.get("distance")
         lines = ["## 车费分析\n"]
         lines.append(f"- 平均车费: **${s['avg_fare']:.2f}**（中位数 ${s['median_fare']:.2f}）")
         lines.append(f"- 平均行程距离: **{s['avg_distance']:.2f}** 英里")
@@ -368,7 +377,7 @@ class QASystem:
         lines.append(f"- 平均速度: **{s['avg_speed']:.1f}** 英里/小时")
 
         if distance is not None:
-            estimated_fare = 2.5 + 3.0 * distance
+            estimated_fare = 2.5 + 3.0 * float(distance)
             lines.append(f"\n**{distance} 英里**的预估车费约为 **${estimated_fare:.2f}**"
                         f"（基于标准费率线性估算，不含小费及附加费）。")
 
@@ -393,8 +402,8 @@ class QASystem:
 
     def answer_ratecode_analysis(self, entities: dict) -> str:
         """费率类型分析：按 RatecodeID 聚合统计各费率的订单数、平均车费、平均距离"""
-        ratecode = entities.get("ratecode")
-        rc = self.stats["ratecode"]
+        ratecode: int | None = entities.get("ratecode")
+        rc: dict = self.stats["ratecode"]
 
         lines = ["## 费率类型分析\n"]
         lines.append("| 费率类型 | 订单数 | 平均车费 | 平均距离 |")
@@ -403,12 +412,12 @@ class QASystem:
             lines.append(f"| {name} | {info['count']:,} | ${info['avg_fare']:.2f} |"
                         f" {info['avg_distance']:.2f}mi |")
 
-        if ratecode:
-            rate_names = {2: "JFK机场", 3: "Newark机场", 5: "议价", 6: "拼车"}
+        if ratecode is not None:
+            rate_names: dict[int, str] = {2: "JFK机场", 3: "Newark机场", 5: "议价", 6: "拼车"}
             name = rate_names.get(ratecode, f"费率{ratecode}")
             if name in rc:
                 info = rc[name]
-                pct = info["count"] / self.stats["total_trips"] * 100
+                pct = float(info["count"]) / float(self.stats["total_trips"]) * 100
                 lines.append(f"\n**{name}**: 共 {info['count']:,} 单（占比 {pct:.1f}%），"
                             f"平均车费 ${info['avg_fare']:.2f}。")
 
@@ -521,7 +530,8 @@ class QASystem:
                 temperature=0.3,
                 max_tokens=500,
             )
-            return response.choices[0].message.content
+            message = response.choices[0].message
+            return message.content if message.content else "模型未返回内容"
         except Exception as e:
             return f"LLM 调用失败: {e}\n\n请尝试使用支持的问题类型重新提问。"
 
@@ -716,16 +726,21 @@ class QASystem:
                     """)
 
                     gr.Markdown("### 快速提问")
-                    for q in [
+                    quick_questions = [
                         "早上8点有多少订单？",
                         "最热门的10个上车区域？",
                         "平均车费是多少？",
                         "JFK机场费率多少钱？",
                         "总共有多少条记录？",
                         "工作日和周末哪个订单多？",
-                    ]:
-                        btn = gr.Button(q, size="sm", elem_classes="quick-btn")
-                        btn.click(lambda q=q: q, None, msg_input)
+                    ]
+
+                    def make_click_handler(text: str):
+                        return lambda: text
+
+                    for question_text in quick_questions:
+                        btn = gr.Button(question_text, size="sm", elem_classes="quick-btn")
+                        btn.click(make_click_handler(question_text), None, msg_input)
 
                     if chart_files:
                         gr.Markdown("### 相关图表")
