@@ -83,7 +83,7 @@ class QASystem:
             "区域热度": "outputs/m2_2_zone_popularity.png",
             "区域热力图": "outputs/m2_2_zone_heatmap.png",
             "车费因素": "outputs/m2_3_fare_factors.png",
-            "地理地图": "outputs/m2_4_geospatial_map.png",
+            "地理地图": "outputs/m2_2_geospatial_map.png",
             "费率分析": "outputs/m2_4_ratecode_analysis.png",
             "质量报告": "outputs/data_quality_report.csv",
             "模型指标": "outputs/m3_model_metrics.csv",

@@ -224,7 +224,7 @@ class TaxiVisualizer:
         """
         利用 geopandas 加载 taxi_zones.shp 绘制区域分级设色地图
         按上车量分为5级着色
-        输出: m2_4_geospatial_map.png
+        输出: m2_2_geospatial_map.png
         """
         shp_path = self.project_root / "data" / "taxi_zones.shp"
         gdf = gpd.read_file(shp_path)
@@ -283,7 +283,7 @@ class TaxiVisualizer:
                                         edgecolor="red", alpha=0.7))
 
         fig.tight_layout()
-        path = str(self.output_dir / "m2_4_geospatial_map.png")
+        path = str(self.output_dir / "m2_2_geospatial_map.png")
         fig.savefig(path, dpi=200, bbox_inches="tight")
         plt.close(fig)
         print(f"  已保存: {path}")
@@ -541,20 +541,18 @@ class TaxiVisualizer:
         print("  M2 数据可视化")
         print("=" * 50)
 
-        print("\n[1/5] 出行需求时间规律...")
+        print("\n[1/4] 出行需求时间规律...")
         self.plot_demand_time()
 
-        print("\n[2/5] 区域热度分析...")
+        print("\n[2/4] 区域热度分析...")
         self.plot_zone_popularity()
         self.plot_zone_hourly_heatmap()
-
-        print("\n[3/5] 车费影响因素分析...")
-        self.plot_fare_factors()
-
-        print("\n[4/5] 地理空间可视化...")
         self.plot_geospatial_map()
 
-        print("\n[5/5] 费率类型深度分析...")
+        print("\n[3/4] 车费影响因素分析...")
+        self.plot_fare_factors()
+
+        print("\n[4/4] 费率类型深度分析...")
         self.plot_ratecode_analysis()
 
         print("\nM2 可视化全部完成！")

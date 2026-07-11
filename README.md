@@ -48,9 +48,9 @@ final_project/
 │   ├── m2_1_demand_time.png        ← 出行需求时间规律
 │   ├── m2_2_zone_popularity.png    ← 区域热度 TOP10
 │   ├── m2_2_zone_heatmap.png       ← 热门区域热力图
+│   ├── m2_2_geospatial_map.png     ← 区域分级设色地图（加分项）
 │   ├── m2_3_fare_factors.png       ← 车费影响因素
-│   ├── m2_4_geospatial_map.png     ← 地理空间分级设色地图
-│   ├── m2_4_ratecode_analysis.png  ← 费率类型深度分析
+│   ├── m2_4_ratecode_analysis.png  ← 费率类型深度分析（自选分析）
 │   ├── m3_neural_network_loss.png  ← 神经网络 Loss 曲线
 │   └── m3_model_metrics.csv        ← 模型指标对比
 │
@@ -212,8 +212,8 @@ LLM_MODEL=deepseek-chat
 | `m2_1_demand_time.png` | M2 | 工作日/周末分小时订单量对比 · 每日趋势 |
 | `m2_2_zone_popularity.png` | M2 | 上下客 TOP 10 区域柱状图 |
 | `m2_2_zone_heatmap.png` | M2 | 热门区域 × 小时 订单量热力图 |
+| `m2_2_geospatial_map.png` | M2 | 区域分级设色地图（加分项） |
 | `m2_3_fare_factors.png` | M2 | 距离-车费散点图 · 时段/乘客数箱线图 |
-| `m2_4_geospatial_map.png` | M2 | 区域分级设色地图（加分项） |
 | `m2_4_ratecode_analysis.png` | M2 | 费率类型深度分析（自选分析） |
 | `m3_neural_network_loss.png` | M3 | 神经网络训练/验证 Loss 曲线 |
 | `m3_model_metrics.csv` | M3 | 神经网络 vs 随机森林 MAE/RMSE 对比 |
