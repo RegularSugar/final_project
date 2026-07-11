@@ -81,9 +81,6 @@ final_project/
 pip install -r requirements.txt
 ```
 
-<details>
-<summary>📦 依赖清单（点击展开）</summary>
-
 ```
 pandas>=2.0.0           # 数据处理
 numpy>=1.24.0           # 数值计算
@@ -97,8 +94,6 @@ gradio>=4.0.0           # M4 可视化界面
 openai>=1.0.0           # 大模型 API 客户端
 python-dotenv>=1.0.0    # 环境变量管理
 ```
-
-</details>
 
 ---
 
@@ -225,5 +220,3 @@ LLM_MODEL=deepseek-chat
 
 ---
 
-<br>
-<p align="center"><sub>学号 · 姓名 · 《人工智能编程语言》期末大作业 1</sub></p>
