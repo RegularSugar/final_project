@@ -429,13 +429,11 @@ class TaxiVisualizer:
         ax1 = fig.add_subplot(2, 3, 1)
         rc_counts = df_rc["RatecodeID"].value_counts().reindex(rc_order)
         colors_pie = sns.color_palette("Set2", 6)
-        wedges, texts, autotexts = ax1.pie(
+        ax1.pie(
             rc_counts.values, labels=None, autopct="%1.1f%%",
             colors=colors_pie, startangle=90, pctdistance=0.6,
             textprops={"fontsize": 10}
         )
-        for autotext in autotexts:
-            autotext.set_fontweight("bold")
         ax1.set_title("各费率类型 订单占比", fontsize=14)
 
         # ---- 子图2: 费率类型图例（右上） ----
