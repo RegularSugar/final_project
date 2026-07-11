@@ -99,7 +99,7 @@ class TaxiVisualizer:
                  color="#F44336", linewidth=2, markersize=5, label="周末")
         ax1.set_xlabel("小时", fontsize=12)
         ax1.set_ylabel("订单占比(%)", fontsize=12)
-        ax1.set_title("工作日 vs 周末 分小时订单量占比对比", fontsize=14, fontweight="bold")
+        ax1.set_title("工作日 vs 周末 分小时订单量占比对比", fontsize=14)
         ax1.set_xticks(range(0, 24))
         ax1.legend(fontsize=11)
         ax1.grid(True, alpha=0.3)
@@ -109,9 +109,9 @@ class TaxiVisualizer:
         ax1.axvspan(peak_morning_start, peak_morning_end, alpha=0.08, color="orange")
         ax1.axvspan(peak_evening_start, peak_evening_end, alpha=0.08, color="orange")
         ax1.annotate("早高峰", xy=(8, ax1.get_ylim()[1] * 0.95), fontsize=9, color="orange",
-                     ha="center", fontweight="bold")
+                     ha="center")
         ax1.annotate("晚高峰", xy=(17.5, ax1.get_ylim()[1] * 0.95), fontsize=9, color="orange",
-                     ha="center", fontweight="bold")
+                     ha="center")
 
         ax2 = axes[1]
         days = daily.index.astype(int)
@@ -119,7 +119,7 @@ class TaxiVisualizer:
         ax2.plot(days, daily.values, "o-", color="#2E7D32", linewidth=1.5, markersize=4)
         ax2.set_xlabel("日期", fontsize=12)
         ax2.set_ylabel("订单量", fontsize=12)
-        ax2.set_title(f"2026年1月 每日订单量趋势 (共 {daily.sum():,} 单)", fontsize=14, fontweight="bold")
+        ax2.set_title(f"2026年1月 每日订单量趋势 (共 {daily.sum():,} 单)", fontsize=14)
         ax2.set_xticks(days)
         ax2.set_xticklabels(days, rotation=45, fontsize=8)
         ax2.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
@@ -160,7 +160,7 @@ class TaxiVisualizer:
             ax.set_yticklabels(names.values, fontsize=9)
             ax.invert_yaxis()
             ax.set_xlabel("订单量", fontsize=12)
-            ax.set_title(title, fontsize=14, fontweight="bold")
+            ax.set_title(title, fontsize=14)
             ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
             for bar, val in zip(bars, counts.values):
                 ax.text(bar.get_width() + max(counts.values) * 0.005,
@@ -173,7 +173,7 @@ class TaxiVisualizer:
         ax2 = axes[1]
         plot_barh_top(ax2, dropoff_counts, dropoff_names, "下车量 TOP 10 区域", "Oranges_d")
 
-        fig.suptitle("NYC 黄牌出租车 区域热度分析", fontsize=16, fontweight="bold", y=1.01)
+        fig.suptitle("NYC 黄牌出租车 区域热度分析", fontsize=16, y=1.01)
         fig.tight_layout()
         path = str(self.output_dir / "m2_2_zone_popularity.png")
         fig.savefig(path, dpi=150, bbox_inches="tight")
@@ -205,7 +205,7 @@ class TaxiVisualizer:
                     cbar_kws={"label": "订单量", "shrink": 0.85},
                     xticklabels=[f"{h}:00" for h in range(24)],
                     ax=ax)
-        ax.set_title(f"热门上车区域 TOP{top_n} 分小时订单量热力图", fontsize=14, fontweight="bold")
+        ax.set_title(f"热门上车区域 TOP{top_n} 分小时订单量热力图", fontsize=14)
         ax.set_xlabel("小时", fontsize=12)
         ax.set_ylabel("区域", fontsize=12)
         ax.tick_params(axis="both", labelsize=8)
@@ -263,7 +263,7 @@ class TaxiVisualizer:
         ax.set_xlim(focus_bounds[0], focus_bounds[2])
         ax.set_ylim(focus_bounds[1], focus_bounds[3])
         ax.set_title("NYC 黄牌出租车 2026年1月 核心区域上车订单量分布",
-                     fontsize=16, fontweight="bold", pad=10)
+                     fontsize=16, pad=10)
         ax.axis("off")
 
         top5 = pickup_counts.head(5)
@@ -278,7 +278,7 @@ class TaxiVisualizer:
                         self.zone_lookup["LocationID"] == row["LocationID"]
                     ]["Zone"].values[0] if self.zone_lookup is not None else str(row["LocationID"])
                     ax.annotate(zone_name, (cx, cy),
-                               fontsize=8, ha="center", color="red", fontweight="bold",
+                               fontsize=8, ha="center", color="red",
                                bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
                                         edgecolor="red", alpha=0.7))
 
@@ -312,7 +312,7 @@ class TaxiVisualizer:
         cbar.set_label("行程时长(分钟)", fontsize=10)
         ax1.set_xlabel("行程距离(英里)", fontsize=12)
         ax1.set_ylabel("车费($)", fontsize=12)
-        ax1.set_title("行程距离 vs 车费 散点图 (N=20,000 随机样本)", fontsize=14, fontweight="bold")
+        ax1.set_title("行程距离 vs 车费 散点图 (N=20,000 随机样本)", fontsize=14)
         ax1.set_xlim(0, sample["trip_distance"].quantile(0.99))
         ax1.set_ylim(0, sample["fare_amount"].quantile(0.99))
         ax1.grid(True, alpha=0.2)
@@ -349,8 +349,8 @@ class TaxiVisualizer:
         for i, period in enumerate(medians.index):
             median_val = float(medians[period])
             ax2.text(i + 1, median_val + 1, f"${median_val:.1f}",
-                     ha="center", fontsize=9, fontweight="bold", color="black")
-        ax2.set_title("不同时段 车费分布", fontsize=14, fontweight="bold")
+                     ha="center", fontsize=9, color="black")
+        ax2.set_title("不同时段 车费分布", fontsize=14)
         ax2.set_xlabel("时段", fontsize=12)
         ax2.set_ylabel("车费($)", fontsize=12)
         ax2.set_xticklabels(medians.index, fontsize=10)
@@ -370,14 +370,14 @@ class TaxiVisualizer:
         pax_medians = df_pax.groupby("passenger_count")["fare_amount"].median()
         for i, val in enumerate(pax_medians.values):
             ax3.text(i + 1, val + 1, f"${val:.1f}",
-                     ha="center", fontsize=9, fontweight="bold", color="black")
-        ax3.set_title("乘客人数 vs 车费分布", fontsize=14, fontweight="bold")
+                     ha="center", fontsize=9, color="black")
+        ax3.set_title("乘客人数 vs 车费分布", fontsize=14)
         ax3.set_xlabel("乘客人数", fontsize=12)
         ax3.set_ylabel("车费($)", fontsize=12)
         ax3.set_xticklabels([f"{i}人" for i in range(1, 6)], fontsize=10)
         ax3.grid(True, alpha=0.3, axis="y")
 
-        fig.suptitle("NYC 黄牌出租车 车费影响因素分析", fontsize=16, fontweight="bold", y=1.01)
+        fig.suptitle("NYC 黄牌出租车 车费影响因素分析", fontsize=16, y=1.01)
         fig.tight_layout()
         path = str(self.output_dir / "m2_3_fare_factors.png")
         fig.savefig(path, dpi=150, bbox_inches="tight")
@@ -436,7 +436,7 @@ class TaxiVisualizer:
         )
         for autotext in autotexts:
             autotext.set_fontweight("bold")
-        ax1.set_title("各费率类型 订单占比", fontsize=14, fontweight="bold")
+        ax1.set_title("各费率类型 订单占比", fontsize=14)
 
         # ---- 子图2: 费率类型图例（右上） ----
         ax2 = fig.add_subplot(2, 3, 2)
@@ -459,8 +459,8 @@ class TaxiVisualizer:
         dist_medians = [s.median() if len(s) > 0 else 0 for s in rc_distance_data]
         for i, val in enumerate(dist_medians):
             ax3.text(i + 1, val + 1, f"{val:.1f}mi",
-                     ha="center", fontsize=9, fontweight="bold", color="black")
-        ax3.set_title("各费率类型 行程距离分布", fontsize=14, fontweight="bold")
+                     ha="center", fontsize=9, color="black")
+        ax3.set_title("各费率类型 行程距离分布", fontsize=14)
         ax3.set_xlabel("费率类型", fontsize=12)
         ax3.set_ylabel("行程距离(英里)", fontsize=12)
         ax3.set_xticklabels([ratecode_labels[rc] for rc in rc_order], fontsize=8)
@@ -478,11 +478,11 @@ class TaxiVisualizer:
                         color="#F44336", alpha=0.7, label="中位数", edgecolor="white")
         for bar, val in zip(bars1, fare_means):
             ax4.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
-                     f"${val:.0f}", ha="center", fontsize=8, fontweight="bold", color="#1565C0")
+                     f"${val:.0f}", ha="center", fontsize=8, color="#1565C0")
         for bar, val in zip(bars2, fare_medians):
             ax4.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
-                     f"${val:.0f}", ha="center", fontsize=8, fontweight="bold", color="#C62828")
-        ax4.set_title("各费率类型 车费均值/中位数", fontsize=14, fontweight="bold")
+                     f"${val:.0f}", ha="center", fontsize=8, color="#C62828")
+        ax4.set_title("各费率类型 车费均值/中位数", fontsize=14)
         ax4.set_xlabel("费率类型", fontsize=12)
         ax4.set_ylabel("车费($)", fontsize=12)
         ax4.set_xticks(x)
@@ -502,8 +502,8 @@ class TaxiVisualizer:
         tip_medians = [s.median() * 100 if len(s) > 0 else 0 for s in tip_data]
         for i, val in enumerate(tip_medians):
             ax5.text(i + 1, (tip_data[i].median() if len(tip_data[i]) > 0 else 0) + 0.005,
-                     f"{val:.1f}%", ha="center", fontsize=9, fontweight="bold", color="black")
-        ax5.set_title("各费率类型 小费比例分布", fontsize=14, fontweight="bold")
+                     f"{val:.1f}%", ha="center", fontsize=9, color="black")
+        ax5.set_title("各费率类型 小费比例分布", fontsize=14)
         ax5.set_xlabel("费率类型", fontsize=12)
         ax5.set_ylabel("小费比例", fontsize=12)
         ax5.set_xticklabels([ratecode_labels[rc] for rc in rc_order], fontsize=8)
@@ -514,7 +514,7 @@ class TaxiVisualizer:
         ax6 = fig.add_subplot(2, 3, 6)
         bars6 = ax6.bar(x, [rc_counts.get(rc, 0) for rc in rc_order],
                         color=colors_pie, edgecolor="white")
-        ax6.set_title("各费率类型 行程数量", fontsize=14, fontweight="bold")
+        ax6.set_title("各费率类型 行程数量", fontsize=14)
         ax6.set_xlabel("费率类型", fontsize=12)
         ax6.set_ylabel("行程数量", fontsize=12)
         ax6.set_xticks(x)
@@ -522,11 +522,11 @@ class TaxiVisualizer:
         ax6.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: f"{y:,.0f}"))
         for bar, val in zip(bars6, [rc_counts.get(rc, 0) for rc in rc_order]):
             ax6.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + max(rc_counts.values) * 0.01,
-                     f"{val:,}", ha="center", fontsize=8, fontweight="bold")
+                     f"{val:,}", ha="center", fontsize=8)
         ax6.grid(True, alpha=0.3, axis="y")
 
         fig.suptitle("NYC 黄牌出租车 费率类型深度分析（不同费率码的行程特征对比）",
-                     fontsize=20, fontweight="bold", y=1.03)
+                     fontsize=20, y=1.03)
         fig.tight_layout()
         path = str(self.output_dir / "m2_4_ratecode_analysis.png")
         fig.savefig(path, dpi=150, bbox_inches="tight")

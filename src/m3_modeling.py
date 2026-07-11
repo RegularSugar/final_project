@@ -329,7 +329,7 @@ class DemandPredictor:
         ax.plot(epochs, val_losses, "r-", linewidth=1.5, label="验证 Loss", alpha=0.8)
         ax.set_xlabel("Epoch", fontsize=12)
         ax.set_ylabel("MSE Loss", fontsize=12)
-        ax.set_title("神经网络训练与验证 Loss 曲线", fontsize=14, fontweight="bold")
+        ax.set_title("神经网络训练与验证 Loss 曲线", fontsize=14)
         ax.legend(fontsize=11)
         ax.grid(True, alpha=0.3)
         ax.annotate(f"最低验证 Loss: {min(val_losses):.1f}",
